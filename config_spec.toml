@@ -54,7 +54,7 @@ doc = "The port of the real bitcoind."
 
 [[param]]
 name = "user"
-type = "std::collections::HashMap<String, btc_rpc_proxy::users::input::User>"
+type = "std::collections::HashMap<String, crate::users::input::User>"
 merge_fn = "std::iter::Extend::extend"
 default = "Default::default()"
 argument = false

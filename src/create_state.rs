@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Error;
-use btc_rpc_proxy::{AuthSource, Peers, RpcClient, State, TorState};
+use crate::{AuthSource, Peers, RpcClient, State, TorState};
 use slog::Drain;
 use tokio::sync::RwLock;
 
@@ -18,7 +18,8 @@ pub fn create_state() -> Result<State, Error> {
     use slog::Level;
 
     let (config, _) =
-        Config::including_optional_config_files(std::iter::empty::<&str>()).unwrap_or_exit();
+        // Config::including_optional_config_files(std::iter::empty::<&str>()).unwrap_or_exit();
+        Config::including_optional_config_files(&["btc_rpc_proxy.toml"]).unwrap_or_exit();
 
     let log_level = match config.verbose {
         0 => Level::Critical,
@@ -63,7 +64,7 @@ pub fn create_state() -> Result<State, Error> {
         bind: (config.bind_address, config.bind_port).into(),
         rpc_client,
         tor,
-        users: btc_rpc_proxy::users::input::map_default(config.user, config.default_fetch_blocks),
+        users: crate::users::input::map_default(config.user, config.default_fetch_blocks),
         logger,
         peer_timeout: Duration::from_secs(config.peer_timeout),
         peers: RwLock::new(Arc::new(Peers::new())),
