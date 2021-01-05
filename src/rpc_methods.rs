@@ -82,6 +82,62 @@ impl<'de> Deserialize<'de> for GetBlockHeader {
         }
     }
 }
+#[derive(Debug)]
+pub struct GetBlockCount;
+
+impl RpcMethod for GetBlockCount {
+    type Params = [(); 0];
+    type Response = usize;
+    fn as_str(&self) -> &'static str {
+        "getblockcount"
+    }
+}
+impl Serialize for GetBlockCount {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for GetBlockCount {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s: &'de str = Deserialize::deserialize(deserializer)?;
+        if s == Self.as_str() {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(s),
+                &Self.as_str(),
+            ))
+        }
+    }
+}
+#[derive(Debug)]
+pub struct GetBlockHash;
+
+impl RpcMethod for GetBlockHash {
+    type Params = (usize,);
+    type Response = BlockHash;
+    fn as_str(&self) -> &'static str {
+        "getblockhash"
+    }
+}
+impl Serialize for GetBlockHash {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for GetBlockHash {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s: &'de str = Deserialize::deserialize(deserializer)?;
+        if s == Self.as_str() {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(s),
+                &Self.as_str(),
+            ))
+        }
+    }
+}
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

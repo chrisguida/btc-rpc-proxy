@@ -6,6 +6,7 @@ extern crate serde;
 
 use anyhow::Error;
 use btc_rpc_proxy;
+// use block_filters;
 
 mod create_state;
 
@@ -13,4 +14,5 @@ mod create_state;
 async fn main() -> Result<(), Error> {
     let state = create_state::create_state()?.arc();
     btc_rpc_proxy::main(state).await
+    // block_filters::main();
 }
