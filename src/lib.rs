@@ -10,9 +10,11 @@ extern crate configure_me;
 
 mod block_filters;
 mod undo;
+mod index;
 mod create_state;
 pub mod client;
 pub mod fetch_blocks;
+pub mod fetch_filters;
 pub mod proxy;
 pub mod rpc_methods;
 pub mod state;

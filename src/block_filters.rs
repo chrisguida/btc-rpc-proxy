@@ -230,6 +230,7 @@ fn get_script_from_undo<I: Iterator<Item = TxOutUndo>>(iter: &mut I, o: &OutPoin
 
 pub async fn build_filter_index_from_undo_data(state: Arc<State>) -> Result<(), Error> {
     // let block_undo_cursor = BlockUndoCursor::new();
+    println!("got here! #1");
     let result = state
         .rpc_client
         .call(&RpcRequest {
@@ -239,24 +240,27 @@ pub async fn build_filter_index_from_undo_data(state: Arc<State>) -> Result<(), 
         })
         .await?
         .into_result();
+    println!("got here! #2");
     let db: sled::Db = sled::open("bf").unwrap();
     let bf_tree = db.open_tree("bf").unwrap();
     // for i in 0..=count {
     let count = result.unwrap();
     println!("count={}", count);
     // let mut c = BlockUndoCursor::new(PathBuf::from("/home/cguida/.bitcoin/blocks"), 0, 19502380).await;
-    let mut c = BlockUndoCursor::new(PathBuf::from("/home/cguida/.bitcoin/blocks"), 0, 0).await;
+    // let mut c = BlockUndoCursor::new(PathBuf::from("/home/cguida/.bitcoin/testnet3/blocks")).await;
+    let mut c = BlockUndoCursor::new(PathBuf::from("/home/cguida/.bitcoin/blocks")).await;
+    println!("finished building index");
     for i in 0..=count {
         // for i in 0..=count {
-        println!("requesting block hash for height {:?}", i);
+        // println!("requesting block hash for height {:?}", i);
 
         let block = fetch_block_by_height(state.clone(), i).await?;
         let flat_map_fn = |tx_undo: TxUndo| tx_undo.output_undo;
-        let block_undo = if i > 0 {
-            c.next().await.unwrap().unwrap()
-        } else {
-            BlockUndo{txdata_undo: Vec::<TxUndo>::new()}
-        };
+        let block_undo = c.next().await.unwrap().unwrap();
+        // } else {
+        //     BlockUndo{txdata_undo: Vec::<TxUndo>::new()}
+        // };
+        // println!("block_undo = {:?}", block_undo);
         assert_eq!(block_undo.txdata_undo.len(), block.txdata.len() - 1);
         let mut block_output_iter = block_undo.txdata_undo.into_iter().flat_map(flat_map_fn);
         
@@ -280,7 +284,7 @@ pub async fn build_filter_index_from_undo_data(state: Arc<State>) -> Result<(), 
                 |o| get_script_from_undo(&mut block_output_iter, o)
             ).unwrap();
         if i % 1000 == 0 {
-            println!("filter = {:?}", block_filter.content.to_hex());
+            println!("height = {} filter = {:?}", i, block_filter.content.to_hex());
         }
         bf_tree.insert(block.block_hash(), block_filter.content.as_slice())?;
 

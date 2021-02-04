@@ -166,11 +166,14 @@ impl<T: RpcMethod> RpcResponse<T> {
     pub fn into_result(self) -> Result<T::Response, RpcError> {
         match self.error {
             Some(e) => Err(e),
-            None => Ok(self.result).transpose().unwrap_or_else(|| {
-                serde_json::from_value(Value::Null)
-                    .map_err(Error::from)
-                    .map_err(RpcError::from)
-            }),
+            None => {
+                    // println!("got here! #3");
+                    Ok(self.result).transpose().unwrap_or_else(|| {
+                    serde_json::from_value(Value::Null)
+                        .map_err(Error::from)
+                        .map_err(RpcError::from)
+                })
+            },
         }
     }
     pub fn into_response(mut self) -> Result<Response<Body>, Error> {
