@@ -19,7 +19,7 @@ pub fn create_state() -> Result<State, Error> {
 
     let (config, _) =
         // Config::including_optional_config_files(std::iter::empty::<&str>()).unwrap_or_exit();
-        Config::including_optional_config_files(&["btc_rpc_proxy.toml"]).unwrap_or_exit();
+        Config::including_optional_config_files(&["brp_config.toml"]).unwrap_or_exit();
 
     let log_level = match config.verbose {
         0 => Level::Critical,

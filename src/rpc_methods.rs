@@ -1,6 +1,12 @@
-use bitcoin::hash_types::BlockHash;
+use bitcoin::{
+    consensus::Decodable, 
+    hash_types::{BlockHash, FilterHeader}, 
+    network::{constants::ServiceFlags, Address}, 
+    util::{amount::Amount, bip158::BlockFilter}
+};
 use linear_map::{set::LinearSet, LinearMap};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 
 use crate::client::RpcMethod;
 use crate::util::{Either, HexBytes};
@@ -105,6 +111,7 @@ impl<'de> Deserialize<'de> for GetBlockCount {
         }
     }
 }
+
 #[derive(Debug)]
 pub struct GetBlockHash;
 
@@ -122,6 +129,36 @@ impl Serialize for GetBlockHash {
 }
 impl<'de> Deserialize<'de> for GetBlockHash {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s: &'de str = Deserialize::deserialize(deserializer)?;
+        if s == Self.as_str() {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(s),
+                &Self.as_str(),
+            ))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GetBlockFilter;
+
+impl RpcMethod for GetBlockFilter {
+    type Params = (BlockHash,);
+    type Response = GetBlockFilterResult;
+    fn as_str(&self) -> &'static str {
+        "getblockfilter"
+    }
+}
+impl Serialize for GetBlockFilter {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for GetBlockFilter {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // println!("deserializing getblockfilter response!");
         let s: &'de str = Deserialize::deserialize(deserializer)?;
         if s == Self.as_str() {
             Ok(Self)
@@ -163,6 +200,16 @@ pub struct GetBlockResult {
     pub strippedsize: Option<usize>,
     pub weight: usize,
     pub tx: Vec<bitcoin::Txid>,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBlockFilterResult {
+    // #[serde(flatten)]
+    // pub filter: BlockFilter,
+    // pub header: FilterHeader,
+    pub filter: String,
+    pub header: String,
 }
 
 #[derive(Debug)]

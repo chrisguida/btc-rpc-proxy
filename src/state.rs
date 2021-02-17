@@ -55,6 +55,9 @@ impl State {
                 peers = handle.await??;
             }
         }
+        // if peers.peers.len() == 0 {
+        //     panic!("get_peers got no peers");
+        // }
         Ok(peers.handles())
     }
 }

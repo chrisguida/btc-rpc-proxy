@@ -164,8 +164,15 @@ impl From<RpcError> for RpcResponse<GenericRpcMethod> {
 }
 impl<T: RpcMethod> RpcResponse<T> {
     pub fn into_result(self) -> Result<T::Response, RpcError> {
+        // println!("into_result called with error {:?}", self.error);
         match self.error {
-            Some(e) => Err(e),
+            Some(e) => 
+            // Err(e)
+            {
+                // println!("Error in into_result!");
+                Err(e)
+            }
+            ,
             None => Ok(self.result).transpose().unwrap_or_else(|| {
                 serde_json::from_value(Value::Null)
                     .map_err(Error::from)
@@ -313,10 +320,12 @@ impl RpcClient {
             }
         }
     }
+
     pub async fn call<T: RpcMethod + Serialize>(
         &self,
         req: &RpcRequest<T>,
     ) -> Result<RpcResponse<T>, ClientError> {
+        // println!("calling `call` with req method {:?}", req.method.as_str());
         let response = self
             .client
             .request(
@@ -327,6 +336,7 @@ impl RpcClient {
                     .body(serde_json::to_string(req)?.into())?,
             )
             .await?;
+        // println!("call complete! with req method {:?}", req.method.as_str());
         let status = response.status();
         let body = to_bytes(response.into_body()).await?;
         let mut rpc_response: RpcResponse<T> =
@@ -345,6 +355,7 @@ impl RpcClient {
                     },
                 }
             })?;
+        // println!("deserialization complete! with req method {:?}", req.method.as_str());
         if let Some(ref mut error) = rpc_response.error {
             error.status = Some(status);
         }
