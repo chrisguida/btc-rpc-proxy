@@ -6,24 +6,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::Error;
 use async_channel as mpmc;
-use bitcoin::{
-    consensus::{Decodable, Encodable},
-    hash_types::BlockHash,
-    network::{
-        constants::{Network::Bitcoin, ServiceFlags},
-        message::{NetworkMessage, RawNetworkMessage},
-        message_blockdata::Inventory,
-        message_network::VersionMessage,
-    },
-    Block,
-};
+use bitcoin::{Block, consensus::{Decodable, Encodable}, hash_types::BlockHash, hashes::hex::FromHex, network::{constants::{Network::Bitcoin, ServiceFlags}, message::{NetworkMessage, RawNetworkMessage}, message_blockdata::Inventory, message_filter::GetCFilters, message_network::VersionMessage}, util::bip158::BlockFilter};
 use futures::FutureExt;
 use socks::Socks5Stream;
-use tokio::time;
+// use time::delay_for;
+// use tokio::time;
 
-use crate::client::{
-    ClientError, RpcClient, RpcError, RpcRequest, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE,
-};
+use crate::{client::{ClientError, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcClient, RpcError, RpcRequest, RpcResponse}, rpc_methods::GetBlockFilter};
+use crate::create_state::create_state;
 use crate::rpc_methods::{GetBlock, GetBlockParams, GetPeerInfo, PeerAddressError};
 use crate::state::{State, TorState};
 
@@ -94,6 +84,7 @@ impl Peers {
         )
     }
     pub fn handles<C: FromIterator<PeerHandle>>(&self) -> C {
+        println!("peers.handles... len = {}", self.peers.len());
         self.peers.iter().map(|p| p.handle()).collect()
     }
 }
@@ -594,7 +585,7 @@ async fn test_peers() {
     // if peers.len() == 0 {
     //     panic!();
     // }
-    time::delay_for(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
     let mut first_peer = &mut peers[0];
     let (filter, conn) = fetch_filter_from_peer(
         state.clone(),

@@ -9,7 +9,7 @@ extern crate serde;
 extern crate configure_me;
 
 mod block_filters;
-mod create_state;
+pub mod create_state;
 pub mod client;
 pub mod fetch_blocks;
 pub mod proxy;
