@@ -111,10 +111,6 @@ impl<'de> Deserialize<'de> for GetBlockCount {
         }
     }
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> block filters first try
 #[derive(Debug)]
 pub struct GetBlockHash;
 
