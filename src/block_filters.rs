@@ -433,7 +433,6 @@ async fn print_all_filters() {
 
 //     // let block_hash: BlockHash = "00000000fd3ceb2404ff07a785c7fdcc76619edc8ed61bd25134eaa22084366a".parse().unwrap();
 //     // let block_filter = filter_index.get(&block_hash).unwrap().clone();
-
 //     for (block_hash, block_filter) in filter_index.iter() {
 //         println!("block_hash {:?} block_filter {:?}", block_hash, block_filter.content.as_slice());
 //         if db.contains_key(block_hash).unwrap() {
