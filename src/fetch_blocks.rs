@@ -6,15 +6,13 @@ use std::time::{Duration, Instant};
 
 use anyhow::Error;
 use async_channel as mpmc;
-use bitcoin::{Block, consensus::{Decodable, Encodable}, hash_types::BlockHash, hashes::hex::FromHex, network::{constants::{Network::Bitcoin, ServiceFlags}, message::{NetworkMessage, RawNetworkMessage}, message_blockdata::Inventory, message_filter::GetCFilters, message_network::VersionMessage}, util::bip158::BlockFilter};
+use bitcoin::{Block, consensus::{Decodable, Encodable}, hash_types::BlockHash, hashes::hex::FromHex, network::{address::Address, constants::{Network::Bitcoin, ServiceFlags}, message::{NetworkMessage, RawNetworkMessage}, message_blockdata::Inventory, message_filter::GetCFilters, message_network::VersionMessage}, util::bip158::{BlockFilter, BlockFilterReader}};
 use futures::FutureExt;
 use socks::Socks5Stream;
-// use time::delay_for;
-// use tokio::time;
+use tokio::time;
 
-use crate::{client::{ClientError, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcClient, RpcError, RpcRequest, RpcResponse}, rpc_methods::GetBlockFilter};
-use crate::create_state::create_state;
-use crate::rpc_methods::{GetBlock, GetBlockParams, GetPeerInfo, PeerAddressError};
+use crate::{client::{ClientError, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcClient, RpcError, RpcRequest, RpcResponse}, create_state::create_state};
+use crate::rpc_methods::{GetBlock, GetBlockFilter, GetBlockParams, GetPeerInfo, PeerAddressError};
 use crate::state::{State, TorState};
 
 type VersionMessageProducer = Box<dyn Fn() -> RawNetworkMessage + Send + Sync>;
