@@ -30,7 +30,11 @@ async-channel = "1.5.1"
 base32 = "0.4.0"
 base64 = "0.13.0"
 bitcoin = { path = "../rust-bitcoin", features = ["use-serde"] }
+<<<<<<< HEAD
 configure_me = { version = "0.4.0" }
+=======
+configure_me = { version = "0.3.4" }
+>>>>>>> 2a386d50d409a8818cfde47cf3272abbd887af85
 derive_more = "0.99.11"
 enum_future = "0.1"
 futures = "0.3.12"
@@ -40,9 +44,15 @@ hyper = { version = "0.14.2", features = ["client", "server", "http2", "http1", 
 itertools = "0.10.0"
 lazy_static = "1.4.0"
 linear-map = { version = "1.2.0", features = ["serde_impl"] }
+<<<<<<< HEAD
 rand = "0.8.2"
 serde = { version = "1.0.120", features = ["derive"] }
 serde_json = "1.0.61"
+=======
+rand = "0.7.3"
+serde = { version = "1.0.117", features = ["derive"] }
+serde_json = "1.0.59"
+>>>>>>> 2a386d50d409a8818cfde47cf3272abbd887af85
 sled = "0.34.6"
 slog = "2.7.0"
 slog-async = "2.6.0"
