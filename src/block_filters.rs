@@ -5,18 +5,14 @@
 //     GenericRpcMethod, RpcError, RpcMethod, RpcRequest, RpcResponse, METHOD_NOT_ALLOWED_ERROR_CODE,
 //     METHOD_NOT_ALLOWED_ERROR_MESSAGE, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE,
 // };
-use crate::{
-    client::{
+use crate::{client::{
         GenericRpcMethod, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcError, 
         RpcRequest, 
         RpcResponse
-    }, 
-    fetch_blocks::fetch_block, rpc_methods::{
+    }, fetch_blocks::{fetch_block, fetch_filter, fetch_filter_from_peers}, rpc_methods::{
         GetBlockCount, GetBlockHash, 
         // GetBlockHeader, GetBlockHeaderParams, GetBlockResult
-    }, 
-    // util::HexBytes
-};
+    }};
 use crate::{
     state::State, 
     create_state
@@ -209,20 +205,7 @@ async fn get_block_hash(state: Arc<State>, block_height: usize) -> Result<BlockH
 }
 
 async fn fetch_block_by_height(state:Arc<State>, block_height: usize) -> Result<Block, Error> {
-    if block_height == 134335 {
-        println!("fetching block hash for height 134335");
-    }
-
     let block_hash = get_block_hash(state.clone(), block_height).await?;
-
-    if block_height == 134335 {
-        println!("successfully fetched block hash for 134335");
-    }
-    // let block_hash = result;
-    // if i % 1000 == 0 || i > 133999 {
-    if block_height == 134335 {
-        println!("fetching block height 134335 hash = {:x}", block_hash);
-    }
     let block = match fetch_block(
         state.clone(), 
         state.clone().get_peers().await.unwrap(), 
@@ -280,7 +263,8 @@ async fn check_block_utxos(state: Arc<State>, utxo_tree: Tree, block_height: usi
     Ok(())
 }
 
-pub async fn build_filter_index_and_utxo_set(state: Arc<State>) -> Result<(), Error> {
+pub async fn build_filter_index_from_peers(state: Arc<State>) -> Result<(), Error> {
+    println!("getting block count");
     let result = state
         .rpc_client
         .call(&RpcRequest {
@@ -289,90 +273,65 @@ pub async fn build_filter_index_and_utxo_set(state: Arc<State>) -> Result<(), Er
             params: [(); 0],
         })
         .await?
-        .into_result();
+        .into_result()
+        ;
     let db: sled::Db = sled::open("bf").unwrap();
-    let utxo_tree = db.open_tree("utxo").unwrap();
     let bf_tree = db.open_tree("bf").unwrap();
     // for i in 0..=count {
     let count = result.unwrap(); 
     println!("count={}", count);
-    for i in 0..=count {
     // for i in 0..=count {
-        // if i % 1000 == 0 || i > 133999 {
+    for i in 0..=1 {
+    // for i in 0..=count {
         if i % 1000 == 0 {
-        // bf_tree.flush();
-        // utxo_tree.flush();
             println!("requesting block hash for height {:?}", i);
         }
-
-        // loop {
-        let block = fetch_block_by_height(
-            state.clone(), i
-        )
-        .await?;
-        // {
-        //     Ok(block) => block,
-        //     // Ok(None) => return Err(anyhow!("None block returned from fetch_block")),
-        //     Err(e) => {
-        //         println!("error on block height {}, retrying", i);
-        //         println!("error: {}", e);
-        //         // Err(e.into())
-        //         ()
-        //     },
-        // };
         // }
 
-        // insert new utxos
-        for tx in &block.txdata {
-            for vout in 0..tx.output.len() {
-                let outpoint = OutPoint::new(tx.txid(), vout as u32);
-                let script = tx.output[vout].script_pubkey.clone();
-                // if tx.txid().to_string() == "03fa5038147f4df74c44541066f79bb76272144bbb56cd60c1cd5b44374494d9" {
-                // if i > 134334 {
-                //     // println!("inserting outpoint {} and script {}", outpoint, script);
-                //     println!("inserting outpoint {}", outpoint);
-                // }
-                let mut outpoint_bin = Vec::new();
-                outpoint.consensus_encode(
-                    &mut outpoint_bin, 
-                ).unwrap();
-                let mut script_bin = Vec::new();
-                script.consensus_encode(
-                    &mut script_bin, 
-                ).unwrap();
-                utxo_tree.insert(outpoint_bin, script_bin);
-            }
-        }
-
-        // calculate and store filter
-        let block_filter = BlockFilter::new_script_filter(
-            &block, |o| get_script_for_coin(utxo_tree.clone(), o)).unwrap();
-        // println!("filter = {:?}", block_filter.content.to_hex());
-        bf_tree.insert(block.block_hash(), block_filter.content.as_slice());
-
-        // delete spends from utxo db
-        for tx in &block.txdata {
-            if !tx.is_coin_base() {
-                if tx.input.len() > 0 {
-                    for vin in 0..tx.input.len() {
-                        // let outpoint = OutPoint::new(tx.txid(), vout as u32);
-                        let outpoint = tx.input[vin].previous_output;
-                        // if tx.txid().to_string() == "03fa5038147f4df74c44541066f79bb76272144bbb56cd60c1cd5b44374494d9" {
-                            // println!("deleting outpoint {} in block hash: {}", outpoint, block.block_hash());
-                        // }
-                        let mut outpoint_bin = Vec::new();
-                        outpoint.consensus_encode(
-                            &mut outpoint_bin, 
-                        ).unwrap();
-                        utxo_tree.remove(outpoint_bin);
-                    }
+        // loop {
+        // let filter = fetch_filter_by_height(
+        //     state.clone(), i
+        // )
+        // .await?;
+        // println!("getting block hash");
+        let block_hash = get_block_hash(state.clone(), i).await?;
+        let filter = match fetch_filter_from_peers(
+            state.clone(), 
+            state.clone().get_peers().await.unwrap(), 
+            i as u32,
+            block_hash
+        )
+        .await 
+        {
+            Some(filter) => {
+                if i == 134335 {
+                    println!("Some filter on fetch_filter_from_peers for hash = {}", block_hash);
                 }
-            }
-        }
-
+                filter
+            },
+            None => {
+                println!("None filter on fetch_filter_from_peers for hash = {}", block_hash);
+                return Err(anyhow!("None filter returned from fetch_filter_from_peers"))
+            },
+            // Err(e) => {
+            //     println!("Error on fetch_filter for hash = {}", block_hash);
+            //     eprintln!("Error contents = {}", e);
+            //     return Err(e.into())
+            // },
+        };
+        bf_tree.insert(block_hash, filter.content.as_slice());
     }
     // println!("count = {:?}", count);
     Ok(())
+}
+
+#[tokio::test]
+async fn test_peers() {
+    let state = create_state::create_state().unwrap().arc();
+    build_filter_index_from_peers(state).await;
+    // let db: sled::Db = sled::open("bf").unwrap();
+    // let utxo_tree = db.open_tree("utxo").unwrap();
+    // let bf_tree = db.open_tree("bf").unwrap();
 }
 
 // #[test]
@@ -387,56 +346,83 @@ async fn fetch_blocks() {
 }
 
 #[tokio::test]
-async fn test_utxo() {
+async fn check_utxos_for_height() {
     let state = create_state::create_state().unwrap().arc();
-    build_filter_index_and_utxo_set(state).await;
+    // build_filter_index_and_utxo_set(state).await;
+    println!("opening bf");
     let db: sled::Db = sled::open("bf").unwrap();
+    println!("opening utxo tree");
     let utxo_tree = db.open_tree("utxo").unwrap();
-    let bf_tree = db.open_tree("bf").unwrap();
-
-    
-    // //print all utxos
-    // let mut iter = utxo_tree.iter();
-    // // for i in 0..10{
-    //     // let result = iter[i].unwrap();
-    // for result in utxo_tree.iter() {
-    //     let (outpoint_bin, script_bin) = result.unwrap();
-    //     let outpoint = OutPoint::consensus_decode(&mut std::io::Cursor::new(
-    //         outpoint_bin
-    //     )).unwrap();
-    //     let script = Script::consensus_decode(&mut std::io::Cursor::new(
-    //         script_bin
-    //     )).unwrap();
-    //     println!("outpoint {} script {}", outpoint, script);
-    // }
-
     // check utxos for block height
-    // check_block_utxos(state, utxo_tree, 134335).await;
+    let block_height = 278234;
+    println!("about to check utxos for block {}", block_height);
+    check_block_utxos(state, utxo_tree, block_height).await;
+}
 
+#[tokio::test]
+async fn print_all_utxos() {
+    println!("opening bf");
+    let db: sled::Db = sled::open("bf").unwrap();
+    println!("opening utxo tree");
+    let utxo_tree = db.open_tree("utxo").unwrap();
+    //print all utxos
+    let mut iter = utxo_tree.iter();
+    // for i in 0..10{
+    // let result = iter[i].unwrap();
+    for result in utxo_tree.iter() {
+        let (outpoint_bin, script_bin) = result.unwrap();
+        let outpoint = OutPoint::consensus_decode(&mut std::io::Cursor::new(outpoint_bin)).unwrap();
+        let script = Script::consensus_decode(&mut std::io::Cursor::new(script_bin)).unwrap();
+        println!("outpoint {} script {}", outpoint, script);
+    }
+}
+
+#[tokio::test]
+async fn print_single_filter() {
+    println!("opening db");
+    let db: sled::Db = sled::open("bf").unwrap();
+    println!("opening bf_tree");
+    let bf_tree = db.open_tree("bf").unwrap();
     // print single filter
-    // let block_hash: BlockHash = "00000000000007003fb47df9f520e292413501053b1e337a2349c093ffc6667e".parse().unwrap();
-    // let block_filter_bin = bf_tree.get(&block_hash).unwrap().unwrap();
+    println!("getting block hash");
+    let block_hash: BlockHash = "0000000000000000000d0806d498ebe37c81960ba66987dd30f1eab9c9330c74"
+    .parse()
+    .unwrap();
+    println!("getting filter");
+    let block_filter_bin = bf_tree.get(&block_hash).unwrap().unwrap();
     // if block_filter_bin.is_none() {
-        // println!("Found None value in block {} {} {}")
+    //     println!("Found None value in block");
     // }
-    // println!("block_hash {:?} block_filter {:?}", block_hash, block_filter_bin.to_hex());
+    println!(
+        "block_hash {:?} block_filter {:?}",
+        block_hash,
+        block_filter_bin.to_hex()
+    );
+}
 
+#[tokio::test]
+async fn print_all_filters() {
+    let db: sled::Db = sled::open("bf").unwrap();
+    let bf_tree = db.open_tree("bf").unwrap();
     // // print all filters
-    // for result in bf_tree.iter() {
-    // // iter = bf_tree.iter();
-    // // for i in 0..10 {
-    // //     let result = iter[i].unwrap();
-    // // // }
-    //     let (block_hash_bin, block_filter_bin) = result.unwrap();
-    //     let block_hash = BlockHash::consensus_decode(&mut std::io::Cursor::new(
-    //         block_hash_bin
-    //     )).unwrap();
-    //     if block_hash.to_string() == "0000000099c744455f58e6c6e98b671e1bf7f37346bfd4cf5d0274ad8ee660cb" {
-
-    //         println!("block_hash {:?} block_filter {:?}", block_hash, block_filter_bin.to_hex());
-    //     }
-    // }
-
+    for result in bf_tree.iter() {
+        // iter = bf_tree.iter();
+        // for i in 0..10 {
+        //     let result = iter[i].unwrap();
+        // // }
+        let (block_hash_bin, block_filter_bin) = result.unwrap();
+        let block_hash =
+            BlockHash::consensus_decode(&mut std::io::Cursor::new(block_hash_bin)).unwrap();
+        if block_hash.to_string()
+            == "0000000099c744455f58e6c6e98b671e1bf7f37346bfd4cf5d0274ad8ee660cb"
+        {
+            println!(
+                "block_hash {:?} block_filter {:?}",
+                block_hash,
+                block_filter_bin.to_hex()
+            );
+        }
+    }
 }
 
 // fn db_test() {
@@ -447,7 +433,7 @@ async fn test_utxo() {
 
 //     // let block_hash: BlockHash = "00000000fd3ceb2404ff07a785c7fdcc76619edc8ed61bd25134eaa22084366a".parse().unwrap();
 //     // let block_filter = filter_index.get(&block_hash).unwrap().clone();
-    
+
 //     for (block_hash, block_filter) in filter_index.iter() {
 //         println!("block_hash {:?} block_filter {:?}", block_hash, block_filter.content.as_slice());
 //         if db.contains_key(block_hash).unwrap() {
@@ -470,4 +456,3 @@ async fn test_utxo() {
 //         println!("block_hash {:?} block_filter {:?}", block_hash, block_filter_bin.to_hex());
 //     }
 // }
-

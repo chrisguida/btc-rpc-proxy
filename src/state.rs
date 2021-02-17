@@ -38,13 +38,24 @@ impl State {
     pub async fn get_peers(self: Arc<Self>) -> Result<Vec<PeerHandle>, Error> {
         let peers = self.peers.read().await.clone();
         if peers.stale(self.max_peer_age) {
-            tokio::task::spawn(async move {
+            println!("found stale peers!");
+            let join_handle = tokio::task::spawn(async move {
                 match Peers::updated(&self.rpc_client).await {
-                    Ok(peers) => *self.peers.write().await = Arc::new(peers),
-                    Err(error) => error!(self.logger, "failed to update peers"; "error" => #error),
+                    Ok(peers) => {
+                        println!("got ok peers!");
+                        *self.peers.write().await = Arc::new(peers)
+                    },
+                    Err(error) => {
+                        println!("got err peers! {:?}", error);
+                        error!(self.logger, "failed to update peers"; "error" => #error)
+                    },
                 }
             });
+            // join_handle.await?;
         }
+        // if peers.peers.len() == 0 {
+        //     panic!("get_peers got no peers");
+        // }
         Ok(peers.handles())
     }
 }
