@@ -340,8 +340,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02d96d1e189ef58269ebe5b97953da3274d83a93af647c2ddd6f9dab28cedb8d"
 dependencies = [
  "autocfg",
-<<<<<<< HEAD
-=======
  "cfg-if 0.1.10",
  "lazy_static",
 ]
@@ -353,7 +351,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02d96d1e189ef58269ebe5b97953da3274d83a93af647c2ddd6f9dab28cedb8d"
 dependencies = [
  "autocfg",
->>>>>>> block filters first try
  "cfg-if 1.0.0",
  "lazy_static",
 ]
@@ -694,8 +691,6 @@ dependencies = [
 [[package]]
 name = "instant"
 version = "0.1.9"
-<<<<<<< HEAD
-=======
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61124eeebbd69b8190558df225adf7e4caafce0d743919e5d6b19652314ec5ec"
 dependencies = [
@@ -705,7 +700,6 @@ dependencies = [
 [[package]]
 name = "iovec"
 version = "0.1.4"
->>>>>>> block filters first try
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61124eeebbd69b8190558df225adf7e4caafce0d743919e5d6b19652314ec5ec"
 dependencies = [
@@ -797,14 +791,11 @@ version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e50ae3f04d169fcc9bde0b547d1c205219b7157e07ded9c5aff03e0637cb3ed7"
 dependencies = [
-<<<<<<< HEAD
-=======
  "cfg-if 0.1.10",
  "fuchsia-zircon",
  "fuchsia-zircon-sys",
  "iovec",
  "kernel32-sys",
->>>>>>> block filters first try
  "libc",
  "log",
  "miow",
@@ -834,11 +825,8 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a31937dea023539c72ddae0e3571deadc1414b300483fa7aaec176168cfa9d2"
 dependencies = [
-<<<<<<< HEAD
-=======
  "cfg-if 0.1.10",
  "libc",
->>>>>>> block filters first try
  "winapi 0.3.8",
 ]
 
@@ -1282,15 +1270,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-<<<<<<< HEAD
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
-=======
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae524f056d7d770e174287294f562e95044c68e88dec909a00d2094805db9d75"
->>>>>>> block filters first try
 
 [[package]]
 name = "socket2"
@@ -1298,11 +1280,7 @@ version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
 dependencies = [
-<<<<<<< HEAD
  "cfg-if 1.0.0",
-=======
- "cfg-if 0.1.10",
->>>>>>> block filters first try
  "libc",
  "winapi 0.3.8",
 ]
@@ -1477,12 +1455,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0987850db3733619253fe60e17cb59b82d37c7e6c0236bb81e4d6b87c879f27"
 dependencies = [
  "cfg-if 0.1.10",
-<<<<<<< HEAD
  "pin-project-lite 0.1.10",
-=======
- "log",
- "pin-project-lite",
->>>>>>> block filters first try
  "tracing-core",
 ]
 
