@@ -55,8 +55,8 @@ impl State {
                 peers = handle.await??;
             }
         }
-        println!("get_peers: waiting 10 seconds...");
-        tokio::time::sleep(Duration::from_secs(10)).await;
+        // println!("get_peers: waiting 10 seconds...");
+        // tokio::time::sleep(Duration::from_secs(10)).await;
         // if peers.peers.len() == 0 {
         //     panic!("get_peers got no peers");
         // }

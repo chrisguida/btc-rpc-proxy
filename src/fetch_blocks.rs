@@ -6,12 +6,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::Error;
 use async_channel as mpmc;
-use bitcoin::{Block, consensus::{Decodable, Encodable}, hash_types::BlockHash, hashes::hex::FromHex, network::{address::Address, constants::{Network::Bitcoin, ServiceFlags}, message::{NetworkMessage, RawNetworkMessage}, message_blockdata::Inventory, message_filter::GetCFilters, message_network::VersionMessage}, util::bip158::{BlockFilter, BlockFilterReader}};
+use bitcoin::{Block, FilterHash, FilterHeader, consensus::{Decodable, Encodable}, hash_types::BlockHash, hashes::hex::{FromHex, ToHex}, network::{address::Address, constants::{Network::Bitcoin, ServiceFlags}, message::{NetworkMessage, RawNetworkMessage}, message_blockdata::Inventory, message_filter::{GetCFCheckpt, GetCFHeaders, GetCFilters}, message_network::VersionMessage}, util::bip158::{BlockFilter, BlockFilterReader}};
 use futures::FutureExt;
 use socks::Socks5Stream;
 use tokio::time;
 
-use crate::{client::{ClientError, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcClient, RpcError, RpcRequest, RpcResponse}, create_state::create_state};
+use crate::{client::{ClientError, MISC_ERROR_CODE, PRUNE_ERROR_MESSAGE, RpcClient, RpcError, RpcRequest, RpcResponse}, create_state::create_state, rpc_methods::GetBlockHash};
 use crate::rpc_methods::{GetBlock, GetBlockFilter, GetBlockParams, GetPeerInfo, PeerAddressError};
 use crate::state::{State, TorState};
 
@@ -63,8 +63,8 @@ impl Peers {
         self.peers.is_empty()
     }
     pub async fn updated(client: &RpcClient) -> Result<Self, PeerUpdateError> {
-        println!("updated called!");
-        dbg!(
+        // println!("updated called!");
+        // dbg!(
             Ok(Self {
             peers: client
                 .call(&RpcRequest {
@@ -82,10 +82,10 @@ impl Peers {
                 .collect(),
             fetched: Some(Instant::now()),
             })
-        )
+        // )
     }
     pub fn handles<C: FromIterator<PeerHandle>>(&self) -> C {
-        println!("peers.handles... len = {}", self.peers.len());
+        // println!("peers.handles... len = {}", self.peers.len());
         self.peers.iter().map(|p| p.handle()).collect()
     }
 }
@@ -100,6 +100,7 @@ pub enum PeerUpdateError {
     InvalidPeerAddress(#[from] PeerAddressError),
 }
 
+#[derive(Debug)]
 pub enum BitcoinPeerConnection {
     ClearNet(TcpStream),
     Tor(Socks5Stream),
@@ -146,26 +147,35 @@ impl Write for BitcoinPeerConnection {
 }
 impl BitcoinPeerConnection {
     pub async fn connect(state: Arc<State>, addr: Arc<String>) -> Result<Self, Error> {
+        // println!("BitcoinPeerConnection::connect");
         tokio::time::timeout(
             state.peer_timeout,
             tokio::task::spawn_blocking(move || {
+                // println!("spawn_blocking task started!");
+                // if addr.spilt()
                 let mut stream = match &state.tor {
                     Some(TorState { only, proxy })
                         if *only || addr.split(":").next().unwrap().ends_with(".onion") =>
                     {
+                        // println!("TOR! {:?}", addr);
                         BitcoinPeerConnection::Tor(Socks5Stream::connect(proxy, &**addr)?)
-                    }
-                    _ => BitcoinPeerConnection::ClearNet(TcpStream::connect(&*addr)?),
+                    },
+                    _ => {
+                        // println!("CLEARNET! {:?}", addr);
+                        BitcoinPeerConnection::ClearNet(TcpStream::connect(&*addr)?)
+                    },
                 };
+                // println!("spawn_blocking task about to encode version_message!");
                 VERSION_MESSAGE().consensus_encode(&mut stream)?;
                 stream.flush()?;
+                // println!("flushed stream!");
                 let _ =
                     bitcoin::network::message::RawNetworkMessage::consensus_decode(&mut stream)?; // version
                 let _ =
                     bitcoin::network::message::RawNetworkMessage::consensus_decode(&mut stream)?; // verack
                 VER_ACK.consensus_encode(&mut stream)?;
                 stream.flush()?;
-
+                // println!("spawn_blocking task finished!");
                 Ok(stream)
             }),
         )
@@ -205,11 +215,13 @@ pub struct PeerHandle {
 impl PeerHandle {
     pub async fn connect(&mut self, state: Arc<State>) -> Result<RecyclableConnection, Error> {
         if let Some(conn) = self.conn.take() {
+            // println!("ok!");
             Ok(RecyclableConnection {
                 conn,
                 send: self.send.clone(),
             })
         } else {
+            // println!("not ok! {:?}", (&self.addr).clone());
             Ok(RecyclableConnection {
                 conn: BitcoinPeerConnection::connect(state, (&self.addr).clone()).await?,
                 send: self.send.clone(),
@@ -218,6 +230,7 @@ impl PeerHandle {
     }
 }
 
+#[derive(Debug)]
 pub struct RecyclableConnection {
     conn: BitcoinPeerConnection,
     send: mpmc::Sender<BitcoinPeerConnection>,
@@ -432,24 +445,26 @@ async fn fetch_filter_from_self(state: &State, hash: BlockHash) -> Result<Option
     }
 }
 
-async fn fetch_filter_from_peer<'a>(
+async fn fetch_filters_from_peer<'a>(
     state: Arc<State>,
     start_height: u32,
-    hash: BlockHash,
+    stop_hash: BlockHash,
     mut conn: RecyclableConnection,
-) -> Result<(BlockFilter, RecyclableConnection), Error> {
-    println!("fetching filter from a peer!");
+) -> Result<(Vec<(BlockHash, BlockFilter)>, RecyclableConnection), Error> {
+    // println!("fetching filter from a peer!");
     tokio::time::timeout(state.peer_timeout, async move {
         conn = tokio::task::spawn_blocking(move || {
             RawNetworkMessage {
                 magic: Bitcoin.magic(),
-                payload: NetworkMessage::GetCFilters(GetCFilters{filter_type: 0, start_height: start_height, stop_hash: hash}),
+                payload: NetworkMessage::GetCFilters(GetCFilters{filter_type: 0, start_height: start_height, stop_hash}),
             }
             .consensus_encode(&mut *conn)
             .map_err(Error::from)
             .map(|_| conn)
         })
         .await??;
+
+        let mut filters = Vec::<(BlockHash, BlockFilter)>::new();
 
         loop {
             let (msg, conn_) = tokio::task::spawn_blocking(move || {
@@ -459,28 +474,16 @@ async fn fetch_filter_from_peer<'a>(
             })
             .await??;
             conn = conn_;
-            println!("message payload = {:?}", msg.payload);
+            // println!("message payload = {:?}", msg.payload);
             match msg.payload {
                 NetworkMessage::CFilter(f) => {
+                    // println!("got CFilter response!");
                     let filter = BlockFilter::new(&f.filter);
-                    let returned_hash = f.block_hash;
-                    return Ok((filter, conn))
-                    // let merkle_check = f.check_merkle_root();
-                    // let witness_check = f.check_witness_commitment();
-                    // return match (returned_hash == hash, merkle_check, witness_check) {
-                    //     (true, true, true) => Ok((f, conn)),
-                    //     (true, true, false) => {
-                    //         Err(anyhow::anyhow!("Witness check failed for {:?}", hash))
-                    //     }
-                    //     (true, false, _) => {
-                    //         Err(anyhow::anyhow!("Merkle check failed for {:?}", hash))
-                    //     }
-                    //     (false, _, _) => Err(anyhow::anyhow!(
-                    //         "Expected block hash {:?}, got {:?}",
-                    //         hash,
-                    //         returned_hash
-                    //     )),
-                    // };
+                    let hash = f.block_hash;
+                    filters.push((hash, filter));
+                    if hash == stop_hash {
+                        return Ok((filters, conn))
+                    }
                 }
                 NetworkMessage::Ping(p) => {
                     conn = tokio::task::spawn_blocking(move || {
@@ -501,29 +504,29 @@ async fn fetch_filter_from_peer<'a>(
     .await?
 }
 
-pub async fn fetch_filter_from_peers(
+pub async fn fetch_filters_from_peers(
     state: Arc<State>,
     peers: Vec<PeerHandle>,
     start_height: u32,
-    hash: BlockHash,
-) -> Option<BlockFilter> {
+    stop_hash: BlockHash,
+) -> Option<Vec<(BlockHash, BlockFilter)>> {
     use futures::stream::StreamExt;
-    println!("fetching filter from peers!");
+    // println!("fetching filter from peers!");
     let (send, mut recv) = futures::channel::mpsc::channel(1);
     let fut_unordered: futures::stream::FuturesUnordered<_> =
         peers.into_iter().map(futures::future::ready).collect();
     let state_local = state.clone();
-    println!("cloned state_local!");
+    // println!("cloned state_local!");
     let runner = fut_unordered
         .then(move |mut peer| {
             let state_local = state_local.clone();
-            println!("...and then #1....");
+            // println!("...and then #1....");
             async move {
-                println!("...and then....");
-                fetch_filter_from_peer(
+                println!("fetching filters from peer: {:?}", peer.addr);
+                fetch_filters_from_peer(
                     state_local.clone(),
                     start_height,
-                    hash.clone(),
+                    stop_hash.clone(),
                     peer.connect(state_local).await?,
                 )
                 .await
@@ -546,56 +549,322 @@ pub async fn fetch_filter_from_peers(
     b
 }
 
-pub async fn fetch_filter(
+
+async fn fetch_cf_checkpts_from_peer<'a>(
     state: Arc<State>,
-    peers: Vec<PeerHandle>,
-    start_height: u32,
-    hash: BlockHash,
-) -> Result<Option<BlockFilter>, RpcError> {
-    // println!("Fetching filter from self!");
-    Ok(match fetch_filter_from_self(&*state, hash).await? {
-        Some(filter) => 
-        // Some(filter)
-        {
-            // println!("got Some(filter!) {:?}", filter);
-            Some(filter)
-        }
-        ,
-        None => {
-            println!("Block filter is pruned from Core, attempting fetch from peers.");
-            info!(
-                state.logger,
-                "Block filter is pruned from Core, attempting fetch from peers.";
-                "block_hash" => %hash
-            );
-            if let Some(block) = fetch_filter_from_peers(state.clone(), peers, start_height, hash).await {
-                Some(block)
-            } else {
-                error!(state.logger, "Could not fetch block from peers."; "block_hash" => %hash);
-                None
+    stop_hash: BlockHash,
+    mut conn: RecyclableConnection,
+) -> Result<(Vec<FilterHeader>, RecyclableConnection), Error> {
+    // println!("fetching filter from a peer!");
+    tokio::time::timeout(state.peer_timeout, async move {
+        conn = tokio::task::spawn_blocking(move || {
+            RawNetworkMessage {
+                magic: Bitcoin.magic(),
+                payload: NetworkMessage::GetCFCheckpt(GetCFCheckpt{filter_type: 0, stop_hash}),
             }
-        },
+            .consensus_encode(&mut *conn)
+            .map_err(Error::from)
+            .map(|_| conn)
+        })
+        .await??;
+
+        loop {
+            let (msg, conn_) = tokio::task::spawn_blocking(move || {
+                RawNetworkMessage::consensus_decode(&mut *conn)
+                    .map_err(Error::from)
+                    .map(|msg| (msg, conn))
+            })
+            .await??;
+            conn = conn_;
+            // println!("message payload = {:?}", msg.payload);
+            match msg.payload {
+                NetworkMessage::CFCheckpt(checkpts) => {
+                    return Ok((checkpts.filter_headers, conn))
+                }
+                NetworkMessage::Ping(p) => {
+                    conn = tokio::task::spawn_blocking(move || {
+                        RawNetworkMessage {
+                            magic: Bitcoin.magic(),
+                            payload: NetworkMessage::Pong(p),
+                        }
+                        .consensus_encode(&mut *conn)
+                        .map_err(Error::from)
+                        .map(|_| conn)
+                    })
+                    .await??;
+                }
+                m => warn!(state.logger, "Invalid Message Received: {:?}", m),
+            }
+        }
     })
+    .await?
 }
 
 
+pub async fn fetch_cf_checkpts_from_peers(
+    state: Arc<State>,
+    peers: Vec<PeerHandle>,
+    stop_hash: BlockHash,
+) -> Option<Vec<FilterHeader>> {
+    use futures::stream::StreamExt;
+    // println!("fetching filter from peers!");
+    let (send, mut recv) = futures::channel::mpsc::channel(1);
+    let fut_unordered: futures::stream::FuturesUnordered<_> =
+        peers.into_iter().map(futures::future::ready).collect();
+    let state_local = state.clone();
+    // println!("cloned state_local!");
+    let runner = fut_unordered
+        .then(move |mut peer| {
+            let state_local = state_local.clone();
+            // println!("...and then #1....");
+            async move {
+                println!("fetching filters from peer: {:?}", peer.addr);
+                fetch_cf_checkpts_from_peer(
+                    state_local.clone(),
+                    stop_hash.clone(),
+                    peer.connect(state_local).await?,
+                )
+                .await
+            }
+        })
+        .for_each_concurrent(state.max_peer_concurrency, |filter_res| {
+            match filter_res {
+                Ok((filter, conn)) => {
+                    conn.recycle();
+                    send.clone().try_send(filter).unwrap_or_default();
+                }
+                Err(e) => warn!(state.logger, "Error fetching filter from peer: {}", e),
+            }
+            futures::future::ready(())
+        });
+    let b = futures::select! {
+        b = recv.next().fuse() => b,
+        _ = runner.boxed().fuse() => None,
+    };
+    b
+}
+
+async fn fetch_cf_headers_from_peer<'a>(
+    state: Arc<State>,
+    start_height: u32,
+    stop_hash: BlockHash,
+    mut conn: RecyclableConnection,
+) -> Result<(Vec<FilterHeader>, RecyclableConnection), Error> {
+    // println!("fetching filter from a peer!");
+    tokio::time::timeout(state.peer_timeout, async move {
+        conn = tokio::task::spawn_blocking(move || {
+            RawNetworkMessage {
+                magic: Bitcoin.magic(),
+                payload: NetworkMessage::GetCFHeaders(GetCFHeaders{filter_type: 0, start_height, stop_hash}),
+            }
+            .consensus_encode(&mut *conn)
+            .map_err(Error::from)
+            .map(|_| conn)
+        })
+        .await??;
+
+        loop {
+            let (msg, conn_) = tokio::task::spawn_blocking(move || {
+                RawNetworkMessage::consensus_decode(&mut *conn)
+                    .map_err(Error::from)
+                    .map(|msg| (msg, conn))
+            })
+            .await??;
+            conn = conn_;
+            // println!("message payload = {:?}", msg.payload);
+            match msg.payload {
+                NetworkMessage::CFHeaders(cfh_response) => {
+                    // verify filter hashes
+                    let mut headers = Vec::<FilterHeader>::new();
+                    println!("previous header = {}", cfh_response.previous_filter_header);
+                    let mut current_header = cfh_response.previous_filter_header;
+                    // if start_height == 1 {
+                    //     headers.push(current_header);
+                    // }
+                    // headers.pop();
+                    for filter_hash in cfh_response.filter_hashes {
+                        current_header = filter_hash.filter_header(&current_header);
+                        headers.push(current_header);
+                    }
+                    return Ok((headers, conn))
+                }
+                NetworkMessage::Ping(p) => {
+                    conn = tokio::task::spawn_blocking(move || {
+                        RawNetworkMessage {
+                            magic: Bitcoin.magic(),
+                            payload: NetworkMessage::Pong(p),
+                        }
+                        .consensus_encode(&mut *conn)
+                        .map_err(Error::from)
+                        .map(|_| conn)
+                    })
+                    .await??;
+                }
+                m => warn!(state.logger, "Invalid Message Received: {:?}", m),
+            }
+        }
+    })
+    .await?
+}
+
+
+pub async fn fetch_cf_headers_from_peers(
+    state: Arc<State>,
+    peers: Vec<PeerHandle>,
+    start_height: u32,
+    stop_hash: BlockHash,
+) -> Option<Vec<FilterHeader>> {
+    use futures::stream::StreamExt;
+    // println!("fetching filter from peers!");
+    let (send, mut recv) = futures::channel::mpsc::channel(1);
+    let fut_unordered: futures::stream::FuturesUnordered<_> =
+        peers.into_iter().map(futures::future::ready).collect();
+    let state_local = state.clone();
+    // println!("cloned state_local!");
+    let runner = fut_unordered
+        .then(move |mut peer| {
+            let state_local = state_local.clone();
+            // println!("...and then #1....");
+            async move {
+                println!("fetching filters from peer: {:?}", peer.addr);
+                fetch_cf_headers_from_peer(
+                    state_local.clone(),
+                    start_height,
+                    stop_hash.clone(),
+                    peer.connect(state_local).await?,
+                )
+                .await
+            }
+        })
+        .for_each_concurrent(state.max_peer_concurrency, |filter_res| {
+            match filter_res {
+                Ok((filter, conn)) => {
+                    conn.recycle();
+                    send.clone().try_send(filter).unwrap_or_default();
+                }
+                Err(e) => warn!(state.logger, "Error fetching filter from peer: {}", e),
+            }
+            futures::future::ready(())
+        });
+    let b = futures::select! {
+        b = recv.next().fuse() => b,
+        _ = runner.boxed().fuse() => None,
+    };
+    b
+}
+
+async fn get_block_hash(state: Arc<State>, block_height: usize) -> Result<BlockHash, RpcError> {
+    loop {
+        let result = match state
+        .rpc_client
+        .call(&RpcRequest {
+            id: None,
+            method: GetBlockHash,
+            params: (block_height,),
+        })
+        .await {
+            Ok(a) => return a.into_result(),
+            Err(e) => {
+                eprintln!("error getting block hash, retrying: {}", e);
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            ()
+            },
+        };
+    }
+}
+
 #[tokio::test]
-async fn test_peers() {
+async fn test_fetch_and_verify_filters() {
     let state = create_state().unwrap().arc();
     let mut peers= state.clone().get_peers().await.unwrap();
-    // if peers.len() == 0 {
-    //     panic!();
-    // }
-    tokio::time::sleep(Duration::from_secs(10)).await;
     let mut first_peer = &mut peers[0];
-    let (filter, conn) = fetch_filter_from_peer(
-        state.clone(),
-        0,
-        BlockHash::from_hex("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f").unwrap(),
-        first_peer.connect(state.clone()).await.unwrap()
-    ).await.unwrap();
-    println!("blockfilter = {:?}", filter);
-    // let db: sled::Db = sled::open("bf").unwrap();
-    // let utxo_tree = db.open_tree("utxo").unwrap();
-    // let bf_tree = db.open_tree("bf").unwrap();
+    let (checkpts, conn) = 
+        fetch_cf_checkpts_from_peer(
+            state.clone(),
+            BlockHash::from_hex("0000000000000000000a94e99abfcac55d72702dbc967414fdb6f067ca76d969").unwrap(), // 671830
+            first_peer.connect(state.clone()).await.unwrap()
+        ).await.unwrap();
+    let mut conn = first_peer.connect(state.clone()).await.unwrap();
+    for (i, ckpt_header) in checkpts.iter().enumerate() {
+        let ckpt_height =  (i +1) * 1000;
+        let start_height = (ckpt_height - 999) as u32;
+        println!("checkpt # {} = {:?} ... fetching headers...", ckpt_height, ckpt_header);
+        let ckpt_blk_hash = get_block_hash(state.clone(), ckpt_height).await.unwrap();
+        let (headers, conn) = 
+            fetch_cf_headers_from_peer(
+                state.clone(),
+                start_height,
+                // BlockHash::from_hex("0000000008e647742775a230787d66fdf92c46a48c896bfbc85cdc8acc67e87d").unwrap(), // 999
+                ckpt_blk_hash, // 1000
+                // BlockHash::from_hex("0000000000000000000a94e99abfcac55d72702dbc967414fdb6f067ca76d969").unwrap(), // 671830
+                first_peer.connect(state.clone()).await.unwrap()
+            ).await.unwrap();
+        assert!(headers.last().unwrap() == ckpt_header);
+        for (i, header) in headers.iter().enumerate() {
+            println!("hash # {} = {:?}", i, header);
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_fetch_cf_headers_from_peer() {
+    let state = create_state().unwrap().arc();
+    let mut peers= state.clone().get_peers().await.unwrap();
+    let mut first_peer = &mut peers[0];
+    let (headers, conn) = 
+        fetch_cf_headers_from_peer(
+            state.clone(),
+            1,
+            // BlockHash::from_hex("0000000008e647742775a230787d66fdf92c46a48c896bfbc85cdc8acc67e87d").unwrap(), // 999
+            BlockHash::from_hex("00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09").unwrap(), // 1000
+            // BlockHash::from_hex("0000000000000000000a94e99abfcac55d72702dbc967414fdb6f067ca76d969").unwrap(), // 671830
+            first_peer.connect(state.clone()).await.unwrap()
+        ).await.unwrap();
+    for (i, header) in headers.iter().enumerate() {
+        println!("hash # {} = {:?}", i, header);
+    }
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn test_fetch_cf_checkpt_from_peer() {
+    let state = create_state().unwrap().arc();
+    let mut peers= state.clone().get_peers().await.unwrap();
+    let mut first_peer = &mut peers[0];
+    let (checkpts, conn) = 
+        dbg!(fetch_cf_checkpts_from_peer(
+            state.clone(),
+            BlockHash::from_hex("0000000000000000000a94e99abfcac55d72702dbc967414fdb6f067ca76d969").unwrap(), // 671830
+            first_peer.connect(state.clone()).await.unwrap()
+        ).await.unwrap());
+    for (i, header) in checkpts.iter().enumerate() {
+        println!("checkpt # {} = {:?}", (i +1) * 1000, header);
+    }
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn test_fetch_cf_from_peer() {
+    let state = create_state().unwrap().arc();
+    let mut peers= state.clone().get_peers().await.unwrap();
+    let mut first_peer = &mut peers[1];
+    let (filters, conn) = 
+        dbg!(fetch_filters_from_peer(
+            state.clone(),
+            0,
+            // BlockHash::from_hex("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f").unwrap(), // 0
+            // BlockHash::from_hex("00000000000000000007316856900e76b4f7a9139cfbfba89842c8d196cd5f91").unwrap(), // 600000
+            // BlockHash::from_hex("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048").unwrap(), // 1
+            // BlockHash::from_hex("000000003b2cfccabec62b1f874ee8e8e3c481a7e78d5188d7777fbbb948f1a0").unwrap(), // 998
+            BlockHash::from_hex("0000000008e647742775a230787d66fdf92c46a48c896bfbc85cdc8acc67e87d").unwrap(), // 999
+            // BlockHash::from_hex("000000007bc154e0fa7ea32218a72fe2c1bb9f86cf8c9ebf9a715ed27fdb229a").unwrap(), // 100
+            first_peer.connect(state.clone()).await.unwrap()
+        ).await.unwrap());
+    for (i, (hash, filter)) in filters.iter().enumerate() {
+        println!("blockfilter # {} = {:?}", i, filter.content.to_hex());
+    }
+
+    tokio::time::sleep(Duration::from_secs(10)).await;
 }
