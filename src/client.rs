@@ -361,6 +361,54 @@ impl RpcClient {
         }
         Ok(rpc_response)
     }
+
+    pub async fn call_batch<T: RpcMethod + Serialize>(
+        &self,
+        reqs: &Vec<RpcRequest<T>>,
+    ) -> Result<Vec<RpcResponse<T>>, ClientError> {
+        // println!("calling `call` with req method {:?}", req.method.as_str());
+        // let mut rpc_responses = Vec::<RpcResponse<T>>::new();
+        // for req in reqs {
+        let response = self
+            .client
+            .request(
+                Request::builder()
+                    .method(Method::POST)
+                    .header(AUTHORIZATION, self.authorization.try_load().await?)
+                    .uri(&self.uri)
+                    .body(serde_json::to_string(reqs)?.into())?,
+            )
+            .await?;
+        // println!("call complete! with req method {:?}", req.method.as_str());
+        let status = response.status();
+        let body = to_bytes(response.into_body()).await?;        
+        let mut rpc_response: Vec<RpcResponse<T>> =
+            serde_json::from_slice(&body)
+            .map_err(|serde_error| {
+                match std::str::from_utf8(&body) {
+                    Ok(body) => ClientError::ParseResponseUtf8 {
+                        method: reqs[0].method.as_str().to_owned(),
+                        status,
+                        body: body.to_owned(),
+                        serde_error,
+                    },
+                    Err(error) => ClientError::ResponseNotUtf8 {
+                        method: reqs[0].method.as_str().to_owned(),
+                        status,
+                        utf8_error: error,
+                    },
+                }
+            })?;
+        // for resp in &rpc_response {
+        //     if let Some(mut error) = &resp.error {
+        //         error.status = Some(status);
+        //     }
+        // }
+            // rpc_responses.push(rpc_response);
+        // }
+        // println!("deserialization complete! with req method {:?}", req.method.as_str());
+        Ok(rpc_response)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
