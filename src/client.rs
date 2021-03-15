@@ -164,12 +164,9 @@ impl From<RpcError> for RpcResponse<GenericRpcMethod> {
 }
 impl<T: RpcMethod> RpcResponse<T> {
     pub fn into_result(self) -> Result<T::Response, RpcError> {
-        // println!("into_result called with error {:?}", self.error);
         match self.error {
             Some(e) => 
-            // Err(e)
             {
-                // println!("Error in into_result!");
                 Err(e)
             }
             ,
@@ -325,7 +322,6 @@ impl RpcClient {
         &self,
         req: &RpcRequest<T>,
     ) -> Result<RpcResponse<T>, ClientError> {
-        // println!("calling `call` with req method {:?}", req.method.as_str());
         let response = self
             .client
             .request(
@@ -336,8 +332,8 @@ impl RpcClient {
                     .body(serde_json::to_string(req)?.into())?,
             )
             .await?;
-        // println!("call complete! with req method {:?}", req.method.as_str());
         let status = response.status();
+        
         let body = to_bytes(response.into_body()).await?;
         let mut rpc_response: RpcResponse<T> =
             serde_json::from_slice(&body).map_err(|serde_error| {
@@ -355,7 +351,6 @@ impl RpcClient {
                     },
                 }
             })?;
-        // println!("deserialization complete! with req method {:?}", req.method.as_str());
         if let Some(ref mut error) = rpc_response.error {
             error.status = Some(status);
         }
@@ -366,9 +361,6 @@ impl RpcClient {
         &self,
         reqs: &Vec<RpcRequest<T>>,
     ) -> Result<Vec<RpcResponse<T>>, ClientError> {
-        // println!("calling `call` with req method {:?}", req.method.as_str());
-        // let mut rpc_responses = Vec::<RpcResponse<T>>::new();
-        // for req in reqs {
         let response = self
             .client
             .request(
@@ -379,7 +371,6 @@ impl RpcClient {
                     .body(serde_json::to_string(reqs)?.into())?,
             )
             .await?;
-        // println!("call complete! with req method {:?}", req.method.as_str());
         let status = response.status();
         let body = to_bytes(response.into_body()).await?;        
         let mut rpc_response: Vec<RpcResponse<T>> =
@@ -399,14 +390,6 @@ impl RpcClient {
                     },
                 }
             })?;
-        // for resp in &rpc_response {
-        //     if let Some(mut error) = &resp.error {
-        //         error.status = Some(status);
-        //     }
-        // }
-            // rpc_responses.push(rpc_response);
-        // }
-        // println!("deserialization complete! with req method {:?}", req.method.as_str());
         Ok(rpc_response)
     }
 }

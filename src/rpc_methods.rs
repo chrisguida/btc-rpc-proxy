@@ -1,12 +1,7 @@
-use bitcoin::{
-    consensus::Decodable, 
-    hash_types::{BlockHash, FilterHeader}, 
-    network::{constants::ServiceFlags, Address}, 
-    util::{amount::Amount, bip158::BlockFilter}
-};
+use bitcoin::{Address, consensus::Decodable, hash_types::{BlockHash, FilterHeader}, network::{constants::ServiceFlags}, util::{amount::Amount, bip158::BlockFilter}};
 use linear_map::{set::LinearSet, LinearMap};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use crate::client::RpcMethod;
 use crate::util::{Either, HexBytes};
@@ -170,6 +165,41 @@ impl<'de> Deserialize<'de> for GetBlockFilter {
     }
 }
 
+#[derive(Debug)]
+pub struct DeriveAddresses;
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DeriveAddressesParams(
+    pub String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub Option<Vec<usize>>,
+);
+impl RpcMethod for DeriveAddresses {
+    type Params = DeriveAddressesParams;
+    type Response = Vec<Address>;
+    fn as_str(&self) -> &'static str {
+        "deriveaddresses"
+    }
+}
+impl Serialize for DeriveAddresses {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_str().serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for DeriveAddresses {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s: &'de str = Deserialize::deserialize(deserializer)?;
+        if s == Self.as_str() {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(s),
+                &Self.as_str(),
+            ))
+        }
+    }
+}
+
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBlockHeaderResult {
@@ -209,6 +239,12 @@ pub struct GetBlockFilterResult {
     // pub header: FilterHeader,
     pub filter: String,
     pub header: String,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeriveAddressesResult {
+    pub addresses: Vec::<String>,
 }
 
 #[derive(Debug)]
